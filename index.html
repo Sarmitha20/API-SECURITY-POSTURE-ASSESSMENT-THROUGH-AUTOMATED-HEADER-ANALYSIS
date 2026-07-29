@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>API Security Posture Assessment — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- ============================================================
+     TOPBAR — DARK
+  ============================================================ -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-icon">🛡</span>
+      <div>
+        <span class="brand-name">API <em>Security</em> Posture</span>
+        <div class="brand-sub">Assessment Dashboard</div>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <div class="topbar-tagline">Professional API Security Assessment Dashboard</div>
+      <div class="topbar-version">Version: 1.0 &nbsp;|&nbsp; AI-Powered API Security Assessment Tool</div>
+    </div>
+    <div class="topbar-right">
+      <span class="status-dot"></span>
+      <span class="status-label">Online</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================
+     MAIN — LIGHT THEME
+  ============================================================ -->
+<div class="main-wrapper">
+  <div class="container">
+
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-content">
+        <div class="hero-badge">
+          <span class="badge-icon">⚡</span>
+          AI-Powered Security Assessment
+        </div>
+        <h1 class="hero-title">
+          Point it at an endpoint.<br>
+          <span class="hero-highlight">Get the full security readout.</span>
+        </h1>
+        <p class="hero-sub">
+          Assess API security posture through automated header analysis. Inspects transport security, 
+          HTTP headers, and OWASP-mapped risks in a single pass — then explains exactly why the score landed where it did.
+        </p>
+
+        <form method="POST" class="scan-form" id="scan-form" action="/">
+          <div class="scan-input-wrap">
+            <span class="scan-prompt">❯</span>
+            <input type="text" name="api_url" class="scan-input"
+                   placeholder="https://api.github.com"
+                   value="{{ api_url or '' }}"
+                   required autocomplete="off" spellcheck="false">
+          </div>
+          <button type="submit" class="scan-btn" id="scan-btn">
+            <span class="btn-label">▶ Run Scan</span>
+          </button>
+        </form>
+
+        {% if result %}
+        <p class="scan-result {{ 'is-error' if 'Invalid' in result or 'Error' in result else '' }}">
+          {{ result }}
+        </p>
+        {% endif %}
+
+        <div class="chip-row">
+          <span class="chip">🔒 HTTPS Verification</span>
+          <span class="chip">🛡 Security Headers</span>
+          <span class="chip">📋 OWASP Mapping</span>
+          <span class="chip">🤖 Explainable AI</span>
+          <span class="chip">📄 PDF Audit Report</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SCAN RESULTS (only shown after scan)
+    ============================================================ -->
+    {% if score is not none %}
+    {% set header_checks = [
+        ("X-Frame-Options",           x_frame),
+        ("Content-Security-Policy",   csp),
+        ("Strict-Transport-Security", hsts),
+        ("X-Content-Type-Options",    x_content),
+        ("Referrer-Policy",           referrer)
+    ] %}
+
+    <!-- STAT ROW -->
+    <section class="stat-row">
+      <div class="panel gauge-panel">
+        <p class="panel-label">Security Score</p>
+        <div class="gauge-wrap">
+          <canvas id="gaugeChart" width="200" height="200"></canvas>
+          <div class="gauge-center">
+            <span class="gauge-number" id="gaugeNum">0</span>
+            <span class="gauge-max">/100</span>
+            <span class="gauge-risk risk-{{ risk|lower }}">{{ risk }}</span>
+          </div>
+        </div>
+        <p class="panel-caption">Transport &middot; Availability &middot; Header checks</p>
+      </div>
+
+      <div class="panel semaphore-panel">
+        <p class="panel-label">Risk Level</p>
+        <div class="semaphore">
+          <div class="led led-high {{ 'lit' if risk == 'HIGH' else '' }}">
+            <span class="led-dot"></span><span class="led-text">HIGH</span>
+          </div>
+          <div class="led led-medium {{ 'lit' if risk == 'MEDIUM' else '' }}">
+            <span class="led-dot"></span><span class="led-text">MEDIUM</span>
+          </div>
+          <div class="led led-low {{ 'lit' if risk == 'LOW' else '' }}">
+            <span class="led-dot"></span><span class="led-text">LOW</span>
+          </div>
+        </div>
+        <p class="panel-caption">Classification: <strong>{{ risk }}</strong></p>
+      </div>
+
+      <div class="panel headers-panel">
+        <p class="panel-label">Header Coverage</p>
+        <canvas id="radarChart" width="200" height="200"></canvas>
+        <p class="panel-caption"><strong>{{ present_headers }}/5</strong> recommended headers configured</p>
+      </div>
+    </section>
+
+    <!-- INFO STRIP -->
+    <section class="info-strip">
+      <div class="info-chip">
+        <span class="info-chip-label">Target</span>
+        <span class="info-chip-value mono">{{ api_url }}</span>
+      </div>
+      <div class="info-chip">
+        <span class="info-chip-label">HTTPS</span>
+        <span class="info-chip-value mono">{{ https_status }}</span>
+      </div>
+      <div class="info-chip">
+        <span class="info-chip-label">Response Time</span>
+        <span class="info-chip-value mono">{{ response_time }} ms</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         HEADER ANALYSIS — WITH REMEDIATION BUTTONS
+         ============================================================ -->
+    <section class="panel chart-panel">
+      <h2 class="panel-title">Header Analysis <span class="panel-title-sub">— visual breakdown</span></h2>
+
+      <!-- Tabular Representation with Remediation Buttons -->
+      <div class="header-analysis-table">
+        <table class="data-table analysis-table">
+          <thead>
+            <tr>
+              <th>Security Header</th>
+              <th>Status</th>
+              <th>Risk Impact</th>
+              <th>Remediation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for name, status in header_checks %}
+            <tr>
+              <td class="mono"><strong>{{ name }}</strong></td>
+              <td>
+                <span class="status-pill {{ 'ok' if status == 'Present' else 'bad' }}">
+                  {% if status == 'Present' %}✓ Present{% else %}✗ Missing{% endif %}
+                </span>
+              </td>
+              <td class="risk-text {{ 'safe' if status == 'Present' else '' }}">
+                {% if name == 'X-Frame-Options' and status == 'Missing' %}
+                  Clickjacking Risk
+                {% elif name == 'Content-Security-Policy' and status == 'Missing' %}
+                  XSS Risk
+                {% elif name == 'Strict-Transport-Security' and status == 'Missing' %}
+                  SSL Stripping Risk
+                {% elif name == 'X-Content-Type-Options' and status == 'Missing' %}
+                  MIME Sniffing Risk
+                {% elif name == 'Referrer-Policy' and status == 'Missing' %}
+                  Info Leakage Risk
+                {% else %}
+                  Protected ✓
+                {% endif %}
+              </td>
+              <td>
+                {% if status == 'Missing' %}
+                <button class="remediation-btn" onclick="showRemediation('{{ name }}')">
+                  🔧 Fix
+                </button>
+                {% else %}
+                <span class="configured-text">✅ Already configured</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Summary Row -->
+      <div class="header-summary-row">
+        <div class="summary-item present">
+          <span class="summary-icon">✅</span>
+          <span class="summary-label">Present Headers:</span>
+          <span class="summary-count">{{ present_headers }}/5</span>
+        </div>
+        <div class="summary-item missing">
+          <span class="summary-icon">❌</span>
+          <span class="summary-label">Missing Headers:</span>
+          <span class="summary-count">{{ 5 - present_headers }}/5</span>
+        </div>
+      </div>
+
+      <!-- Vertical Bar Chart -->
+      <div class="vertical-bar-chart">
+        <div class="chart-title">Header Status — Vertical View</div>
+        <div class="bars-container">
+          {% for name, status in header_checks %}
+          <div class="bar-item">
+            <div class="bar-wrapper">
+              <div class="bar {% if status == 'Present' %}present{% else %}missing{% endif %}" 
+                   style="height: {% if status == 'Present' %}85{% else %}15{% endif %}%;">
+                <span class="bar-value">{{ status }}</span>
+              </div>
+            </div>
+            <div class="bar-label-short">{{ name|truncate(12, true) }}</div>
+            <div class="bar-status-icon">
+              {% if status == 'Present' %}✅{% else %}❌{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="chart-legend">
+          <span class="legend-item">
+            <span class="legend-color present"></span> Present
+          </span>
+          <span class="legend-item">
+            <span class="legend-color missing"></span> Missing
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         OWASP MAPPING
+         ============================================================ -->
+    <section class="panel">
+      <h2 class="panel-title">OWASP API Security Mapping</h2>
+      <table class="data-table owasp-table">
+        <thead>
+          <tr>
+            <th>Security Check</th>
+            <th>Status</th>
+            <th>OWASP Category</th>
+            <th>Severity</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono"><strong>HTTPS Enabled</strong></td>
+            <td>
+              <span class="status-pill {{ 'ok' if https_status == 'Present' else 'bad' }}">
+                {% if https_status == 'Present' %}✓ Present{% else %}✗ Missing{% endif %}
+              </span>
+            </td>
+            <td class="mono muted">API8:2023</td>
+            <td>
+              <span class="severity-badge {{ 'critical' if https_status == 'Missing' else 'safe' }}">
+                {{ 'CRITICAL' if https_status == 'Missing' else 'SECURE' }}
+              </span>
+            </td>
+          </tr>
+          {% for name, status in header_checks %}
+          <tr>
+            <td class="mono"><strong>{{ name }}</strong></td>
+            <td>
+              <span class="status-pill {{ 'ok' if status == 'Present' else 'bad' }}">
+                {% if status == 'Present' %}✓ Present{% else %}✗ Missing{% endif %}
+              </span>
+            </td>
+            <td class="mono muted">API8:2023</td>
+            <td>
+              <span class="severity-badge 
+                {% if status == 'Missing' and name in ['Strict-Transport-Security', 'Content-Security-Policy'] %}
+                  high
+                {% elif status == 'Missing' %}
+                  medium
+                {% else %}
+                  safe
+                {% endif %}">
+                {% if status == 'Missing' and name in ['Strict-Transport-Security', 'Content-Security-Policy'] %}
+                  HIGH
+                {% elif status == 'Missing' %}
+                  MEDIUM
+                {% else %}
+                  OK
+                {% endif %}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="owasp-footnote">
+        <span><span class="footnote-dot critical"></span> Critical</span>
+        <span><span class="footnote-dot high"></span> High</span>
+        <span><span class="footnote-dot medium"></span> Medium</span>
+        <span><span class="footnote-dot safe"></span> Secure</span>
+      </div>
+    </section>
+
+    <!-- EXPLAINABLE AI -->
+    <section class="panel log-panel">
+      <h2 class="panel-title">Explainable AI <span class="panel-title-sub">— why this score</span></h2>
+      <div class="terminal">
+        {% for line in xai_lines %}
+        <p class="term-line term-{{ line.level }}" style="--i:{{ loop.index0 }}">
+          <span class="term-tag">
+            {%- if line.level == 'ok' -%}OK
+            {%- elif line.level == 'warn' -%}WARN
+            {%- elif line.level == 'crit' -%}CRIT
+            {%- elif line.level == 'result' -%}&gt;
+            {%- else -%}INFO
+            {%- endif -%}
+          </span>
+          <span class="term-text">{{ line.text }}</span>
+        </p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <!-- AI SUMMARY -->
+    <section class="panel summary-panel">
+      <h2 class="panel-title">AI Security Summary</h2>
+      <p class="summary-text">{{ ai_summary.intro }}</p>
+      {% if ai_summary.exposure %}
+      <p class="summary-text">{{ ai_summary.exposure }}</p>
+      {% endif %}
+      {% if ai_summary.exposures %}
+      <div class="chip-row" style="margin-bottom:16px;">
+        {% for item in ai_summary.exposures %}
+        <span class="chip chip-danger">{{ item }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="callout callout-{{ risk|lower }}">
+        <p>{{ ai_summary.verdict }}</p>
+      </div>
+    </section>
+
+    <!-- PRIORITY BOARD -->
+    <section class="panel">
+      <h2 class="panel-title">Security Recommendations</h2>
+      <div class="priority-board">
+        <div class="priority-col priority-high">
+          <p class="priority-heading">High Priority</p>
+          {% if priority_board.high %}
+            {% for item in priority_board.high %}
+            <div class="priority-item">🔒 {{ item }}</div>
+            {% endfor %}
+          {% else %}
+            <div class="priority-item priority-clear">✓ No high-priority issues</div>
+          {% endif %}
+        </div>
+        <div class="priority-col priority-medium">
+          <p class="priority-heading">Medium Priority</p>
+          {% if priority_board.medium %}
+            {% for item in priority_board.medium %}
+            <div class="priority-item">🔒 {{ item }}</div>
+            {% endfor %}
+          {% else %}
+            <div class="priority-item priority-clear">✓ No medium-priority issues</div>
+          {% endif %}
+        </div>
+        <div class="priority-col priority-low">
+          <p class="priority-heading">Low Priority</p>
+          {% if priority_board.low %}
+            {% for item in priority_board.low %}
+            <div class="priority-item">🔒 {{ item }}</div>
+            {% endfor %}
+          {% else %}
+            <div class="priority-item priority-clear">✓ No low-priority issues</div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <!-- IMPROVEMENT ANALYSIS -->
+    <section class="panel">
+      <h2 class="panel-title">Security Improvement Analysis</h2>
+      <div class="improve-bars">
+        <div class="improve-row">
+          <span class="improve-label">Current</span>
+          <div class="improve-track">
+            <div class="improve-fill current" style="--w:{{ improvement.current }}%"></div>
+          </div>
+          <span class="improve-value mono">{{ improvement.current }}/100</span>
+        </div>
+        <div class="improve-row">
+          <span class="improve-label">Potential</span>
+          <div class="improve-track">
+            <div class="improve-fill potential" style="--w:{{ improvement.potential }}%"></div>
+          </div>
+          <span class="improve-value mono">{{ improvement.potential }}/100</span>
+        </div>
+      </div>
+      <div class="improve-stats">
+        <div class="improve-stat">
+          <span class="improve-stat-num">+{{ improvement.gain }}</span>
+          <span class="improve-stat-label">Points Available</span>
+        </div>
+        <div class="improve-stat">
+          <span class="improve-stat-num">{{ improvement.headers_present }}/5</span>
+          <span class="improve-stat-label">Headers Configured</span>
+        </div>
+        <div class="improve-stat">
+          <span class="improve-stat-num mono">{{ improvement.risk_from }} → {{ improvement.risk_to }}</span>
+          <span class="improve-stat-label">Risk Trajectory</span>
+        </div>
+        <div class="improve-stat">
+          <span class="improve-stat-num mono">{{ improvement.maturity_from }} → {{ improvement.maturity_to }}</span>
+          <span class="improve-stat-label">Security Maturity</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINAL REPORT DOSSIER -->
+    <section class="panel dossier">
+      <div class="stamp stamp-{{ 'clear' if risk == 'LOW' else 'blocked' }}">
+        {{ final_report.verdict }}
+      </div>
+      <h2 class="panel-title">Final Security Recommendation Report</h2>
+
+      <div class="dossier-meta">
+        <div><span class="dossier-key">Risk Status</span><span class="dossier-val mono risk-{{ risk|lower }}-text">{{ final_report.status }} RISK</span></div>
+        <div><span class="dossier-key">Score</span><span class="dossier-val mono">{{ final_report.score }}/100</span></div>
+        <div><span class="dossier-key">Maturity</span><span class="dossier-val mono">{{ final_report.maturity }}</span></div>
+        <div><span class="dossier-key">Potential</span><span class="dossier-val mono">{{ final_report.potential }}/100</span></div>
+      </div>
+
+      <p class="dossier-heading">Audit Conclusion</p>
+      {% for para in final_report.conclusion %}
+      <p class="summary-text">{{ para }}</p>
+      {% endfor %}
+
+      <p class="dossier-heading">Recommended Action Plan</p>
+      <ol class="action-plan">
+        {% for step in final_report.action_plan %}
+        <li>{{ step }}</li>
+        {% endfor %}
+      </ol>
+
+      <p class="dossier-heading">Reassessment</p>
+      <p class="summary-text mono">{{ final_report.reassessment }}</p>
+    </section>
+
+    <!-- PDF DOWNLOAD -->
+    <section class="download-section">
+      <a href="/download_report" class="download-btn">
+        <span class="download-main">📄 Download Complete Security Report</span>
+        <span class="download-sub">PDF · All sections · Professional layout</span>
+      </a>
+    </section>
+
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- ============================================================
+     FOOTER — DARK
+  ============================================================ -->
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <p class="footer-brand">🛡 API Security Posture Assessment</p>
+    <p class="footer-tagline">Professional API Security Assessment Dashboard</p>
+    <p class="footer-stack">Developed using Python · Flask · HTML · CSS</p>
+    <p class="footer-features">Features: API Scanner | Security Score | Explainable AI | Recommendation Engine | HTML Dashboard</p>
+    <p class="footer-copy">© 2026 API Security Posture Assessment</p>
+  </div>
+</footer>
+
+<!-- ============================================================
+     REMEDIATION POPOVER
+  ============================================================ -->
+<div class="popover-overlay" id="popoverOverlay" onclick="closeRemediation()"></div>
+<div class="remediation-popover" id="remediationPopover">
+  <h3 id="remediationTitle">Remediation Guide</h3>
+  <p id="remediationText">Loading...</p>
+  <p id="remediationCode" class="remediation-code"></p>
+  <button class="close-btn" onclick="closeRemediation()">Got it</button>
+</div>
+
+<script>
+// ── Scan button loading state ──────────────────────────────────
+document.getElementById('scan-form').addEventListener('submit', function(){
+  var btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.querySelector('.btn-label').textContent = 'Scanning...';
+});
+
+// ── Remediation Data ────────────────────────────────────────────
+var remediationData = {
+  'X-Frame-Options': {
+    title: 'X-Frame-Options — Remediation',
+    text: 'Set the X-Frame-Options header to prevent your API\'s web interface from being embedded in malicious iframes. This protects users from Clickjacking attacks where attackers can trick users into performing unintended actions.',
+    code: 'X-Frame-Options: DENY'
+  },
+  'Content-Security-Policy': {
+    title: 'Content-Security-Policy — Remediation',
+    text: 'Define a strict Content-Security-Policy (CSP) header to restrict which resources the browser can load. This significantly reduces XSS and data injection risks by controlling script execution sources.',
+    code: 'Content-Security-Policy: default-src \'none\'; script-src \'self\'; connect-src \'self\''
+  },
+  'Strict-Transport-Security': {
+    title: 'Strict-Transport-Security — Remediation',
+    text: 'Enable HSTS to force browsers to always connect over HTTPS. This prevents SSL stripping and man-in-the-middle attacks. Ensure your certificate is valid before enabling.',
+    code: 'Strict-Transport-Security: max-age=31536000; includeSubDomains; preload'
+  },
+  'X-Content-Type-Options': {
+    title: 'X-Content-Type-Options — Remediation',
+    text: 'Add the X-Content-Type-Options header to prevent browsers from MIME-sniffing responses. This reduces the risk of content-type confusion attacks where browsers might misinterpret content types.',
+    code: 'X-Content-Type-Options: nosniff'
+  },
+  'Referrer-Policy': {
+    title: 'Referrer-Policy — Remediation',
+    text: 'Configure the Referrer-Policy header to control what information is sent in the Referer header. This prevents sensitive URL parameters from leaking to third-party sites.',
+    code: 'Referrer-Policy: strict-origin-when-cross-origin'
+  }
+};
+
+function showRemediation(headerName) {
+  var data = remediationData[headerName];
+  if (!data) return;
+  document.getElementById('remediationTitle').textContent = data.title;
+  document.getElementById('remediationText').textContent = data.text;
+  document.getElementById('remediationCode').innerHTML = '<strong>Recommended Configuration:</strong><br><code>' + data.code + '</code>';
+  document.getElementById('remediationPopover').classList.add('active');
+  document.getElementById('popoverOverlay').classList.add('active');
+}
+
+function closeRemediation() {
+  document.getElementById('remediationPopover').classList.remove('active');
+  document.getElementById('popoverOverlay').classList.remove('active');
+}
+
+// ── Charts (only render if scan results exist) ────────────────
+{% if score is not none %}
+// Gauge counter animation
+(function(){
+  var target = {{ score }};
+  var el = document.getElementById('gaugeNum');
+  if (!el) return;
+  var current = 0;
+  var step = Math.ceil(target / 60);
+  var timer = setInterval(function(){
+    current = Math.min(current + step, target);
+    el.textContent = current;
+    if (current >= target) clearInterval(timer);
+  }, 18);
+})();
+
+// Doughnut gauge
+(function(){
+  var score = {{ score }};
+  var risk  = '{{ risk }}';
+  var colorMap = { HIGH: '#dc2626', MEDIUM: '#d97706', LOW: '#059669' };
+  var fillColor = colorMap[risk] || '#2563eb';
+  new Chart(document.getElementById('gaugeChart'), {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [score, 100 - score],
+        backgroundColor: [fillColor, '#e2e8f0'],
+        borderWidth: 0,
+        circumference: 270,
+        rotation: 225
+      }]
+    },
+    options: {
+      responsive: false,
+      cutout: '78%',
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      animation: { duration: 1100, easing: 'easeInOutCubic' }
+    }
+  });
+})();
+
+// Radar chart
+(function(){
+  var labels = ['X-Frame-Opts', 'CSP', 'HSTS', 'X-Content', 'Referrer'];
+  var values = [
+    {{ 1 if x_frame   == 'Present' else 0 }},
+    {{ 1 if csp       == 'Present' else 0 }},
+    {{ 1 if hsts      == 'Present' else 0 }},
+    {{ 1 if x_content == 'Present' else 0 }},
+    {{ 1 if referrer  == 'Present' else 0 }}
+  ];
+  new Chart(document.getElementById('radarChart'), {
+    type: 'radar',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: 'rgba(37,99,235,0.08)',
+        borderColor: '#2563eb',
+        borderWidth: 2,
+        pointBackgroundColor: values.map(function(v){ return v ? '#059669' : '#dc2626'; }),
+        pointBorderColor: 'transparent',
+        pointRadius: 5
+      }]
+    },
+    options: {
+      responsive: false,
+      scales: {
+        r: {
+          min: 0, max: 1,
+          ticks: { display: false },
+          grid:       { color: '#e2e8f0' },
+          angleLines: { color: '#cbd5e1' },
+          pointLabels: {
+            color: '#475569',
+            font: { family: "'IBM Plex Mono'", size: 10 }
+          }
+        }
+      },
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      animation: { duration: 900 }
+    }
+  });
+})();
+{% endif %}
+</script>
+
+</body>
+</html>
