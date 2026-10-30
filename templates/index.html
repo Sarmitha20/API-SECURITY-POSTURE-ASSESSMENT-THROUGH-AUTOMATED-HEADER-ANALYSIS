@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Security Posture Assessment Through Automated Header Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <div class="scan-bg" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-icon">🛡</span>
+        <span class="brand-name">API Security Posture</span>
+      </div>
+      <div class="topbar-center">
+        <span class="topbar-tagline">API SECURITY POSTURE ASSESSMENT THROUGH AUTOMATED HEADER ANALYSIS</span>
+        <span class="topbar-version">Version: 1.0 &nbsp;|&nbsp; Automated Header Analysis Engine</span>
+      </div>
+      <div class="topbar-right">
+        <span class="status-dot"></span>
+        <span class="status-label">Scanner Online</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <section class="hero">
+      <p class="eyebrow">Automated Header Analysis</p>
+      <h1 class="hero-title">
+        API SECURITY POSTURE ASSESSMENT THROUGH AUTOMATED HEADER ANALYSIS
+      </h1>
+      <p class="hero-sub">
+        This console inspects transport security, HTTP headers, and OWASP-mapped risks
+        in a single pass --- then explains exactly why the score landed where it did.
+      </p>
+
+      <form method="POST" class="scan-form" id="scan-form">
+        <div class="scan-input-wrap">
+          <span class="scan-prompt">❯</span>
+          <input type="text" name="api_url" class="scan-input"
+                 placeholder="https://api.github.com"
+                 value="{{ api_url or '' }}"
+                 required autocomplete="off" spellcheck="false">
+        </div>
+        <button type="submit" class="scan-btn" id="scan-btn">
+          <span class="btn-label">Run Scan</span>
+        </button>
+      </form>
+
+      {% if result %}
+        <p class="scan-result {{ 'is-error' if 'Invalid' in result or 'Error' in result else '' }}">
+          {{ result }}
+        </p>
+      {% endif %}
+
+      <div class="chip-row">
+        <span class="chip">HTTPS Verification</span>
+        <span class="chip">Security Headers</span>
+        <span class="chip">OWASP Mapping</span>
+        <span class="chip">Explainable AI</span>
+        <span class="chip">PDF Audit Report</span>
+      </div>
+    </section>
+
+    {% if score is not none %}
+      {% set header_checks = [
+        ("X-Frame-Options", x_frame),
+        ("Content-Security-Policy", csp),
+        ("Strict-Transport-Security", hsts),
+        ("X-Content-Type-Options", x_content),
+        ("Referrer-Policy", referrer)
+      ] %}
+
+      <section class="stat-row">
+        <div class="panel gauge-panel">
+          <p class="panel-label">Security Score</p>
+          <div class="gauge-wrap">
+            <canvas id="gaugeChart" width="200" height="200"></canvas>
+            <div class="gauge-center">
+              <span class="gauge-number" id="gaugeNum">0</span>
+              <span class="gauge-max">/100</span>
+              <span class="gauge-risk risk-{{ risk|lower }}">{{ risk }}</span>
+            </div>
+          </div>
+          <p class="panel-caption">Transport · Availability · Header checks</p>
+        </div>
+
+        <div class="panel semaphore-panel">
+          <p class="panel-label">Risk Level</p>
+          <div class="semaphore">
+            <div class="led led-high {{ 'lit' if risk == 'HIGH' else '' }}">
+              <span class="led-dot"></span><span class="led-text">HIGH</span>
+            </div>
+            <div class="led led-medium {{ 'lit' if risk == 'MEDIUM' else '' }}">
+              <span class="led-dot"></span><span class="led-text">MEDIUM</span>
+            </div>
+            <div class="led led-low {{ 'lit' if risk == 'LOW' else '' }}">
+              <span class="led-dot"></span><span class="led-text">LOW</span>
+            </div>
+          </div>
+          <p class="panel-caption">Classification: <strong>{{ risk }}</strong></p>
+        </div>
+
+        <div class="panel headers-panel">
+          <p class="panel-label">Header Coverage</p>
+          <canvas id="radarChart" width="200" height="200"></canvas>
+          <p class="panel-caption"><strong>{{ present_headers }}/5</strong> recommended headers configured</p>
+        </div>
+      </section>
+
+      <section class="info-strip">
+        <div class="info-chip">
+          <span class="info-chip-label">Target</span>
+          <span class="info-chip-value mono">{{ api_url }}</span>
+        </div>
+        <div class="info-chip">
+          <span class="info-chip-label">HTTPS</span>
+          <span class="info-chip-value mono">{{ https_status }}</span>
+        </div>
+        <div class="info-chip">
+          <span class="info-chip-label">Status Code</span>
+          <span class="info-chip-value mono">{{ status_code }}</span>
+        </div>
+        <div class="info-chip">
+          <span class="info-chip-label">Response Time</span>
+          <span class="info-chip-value mono">{{ response_time }} ms</span>
+        </div>
+      </section>
+
+      <section class="grid-2">
+        <div class="panel">
+          <h2 class="panel-title">Security Headers</h2>
+          <table class="data-table">
+            <thead><tr><th>Header</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for name, status in header_checks %}
+                <tr>
+                  <td class="mono">{{ name }}</td>
+                  <td><span class="status-pill {{ 'ok' if status == 'Present' else 'bad' }}">
+                    {{ '✓ Present' if status == 'Present' else '✗ Missing' }}
+                  </span></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h2 class="panel-title">OWASP API Security Mapping</h2>
+          <table class="data-table">
+            <thead><tr><th>Check</th><th>Status</th><th>Category</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="mono">HTTPS Enabled</td>
+                <td><span class="status-pill {{ 'ok' if https_status == 'Present' else 'bad' }}">
+                  {{ '✓ Present' if https_status == 'Present' else '✗ Missing' }}
+                </span></td>
+                <td class="mono muted">API8:2023</td>
+              </tr>
+              {% for name, status in header_checks %}
+                <tr>
+                  <td class="mono">{{ name }}</td>
+                  <td><span class="status-pill {{ 'ok' if status == 'Present' else 'bad' }}">
+                    {{ '✓ Present' if status == 'Present' else '✗ Missing' }}
+                  </span></td>
+                  <td class="mono muted">API8:2023</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel chart-panel">
+        <h2 class="panel-title">Header Analysis <span class="panel-title-sub">--- visual breakdown</span></h2>
+        <div class="bar-chart-wrap">
+          <canvas id="headerBar"></canvas>
+        </div>
+      </section>
+
+      <section class="panel log-panel">
+        <h2 class="panel-title">Explainable AI <span class="panel-title-sub">--- why this score</span></h2>
+        <div class="terminal">
+          {% for line in xai_lines %}
+            <p class="term-line term-{{ line.level }}" style="--i:{{ loop.index0 }}">
+              <span class="term-tag">
+                {%- if line.level == 'ok' -%}OK
+                {%- elif line.level == 'warn' -%}WARN
+                {%- elif line.level == 'crit' -%}CRIT
+                {%- elif line.level == 'result' -%}&gt;
+                {%- else -%}INFO
+                {%- endif -%}
+              </span>
+              <span class="term-text">{{ line.text }}</span>
+            </p>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel summary-panel">
+        <h2 class="panel-title">AI Security Summary</h2>
+        <p class="summary-text">{{ ai_summary.intro }}</p>
+        {% if ai_summary.exposure %}
+          <p class="summary-text">{{ ai_summary.exposure }}</p>
+        {% endif %}
+        {% if ai_summary.exposures %}
+          <div class="chip-row" style="margin-bottom:16px;">
+            {% for item in ai_summary.exposures %}
+              <span class="chip chip-danger">{{ item }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="callout callout-{{ risk|lower }}">
+          <p>{{ ai_summary.verdict }}</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">Security Recommendations</h2>
+        <div class="priority-board">
+          <div class="priority-col priority-high">
+            <p class="priority-heading">High Priority</p>
+            {% if priority_board.high %}
+              {% for item in priority_board.high %}
+                <div class="priority-item">&#9888; {{ item }}</div>
+              {% endfor %}
+            {% else %}
+              <div class="priority-item priority-clear">&#10003; No high-priority issues</div>
+            {% endif %}
+          </div>
+          <div class="priority-col priority-medium">
+            <p class="priority-heading">Medium Priority</p>
+            {% if priority_board.medium %}
+              {% for item in priority_board.medium %}
+                <div class="priority-item">&#9888; {{ item }}</div>
+              {% endfor %}
+            {% else %}
+              <div class="priority-item priority-clear">&#10003; No medium-priority issues</div>
+            {% endif %}
+          </div>
+          <div class="priority-col priority-low">
+            <p class="priority-heading">Low Priority</p>
+            {% if priority_board.low %}
+              {% for item in priority_board.low %}
+                <div class="priority-item">&#9888; {{ item }}</div>
+              {% endfor %}
+            {% else %}
+              <div class="priority-item priority-clear">&#10003; No low-priority issues</div>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">Security Improvement Analysis</h2>
+        <div class="improve-bars">
+          <div class="improve-row">
+            <span class="improve-label">Current</span>
+            <div class="improve-track">
+              <div class="improve-fill current" style="--w:{{ improvement.current }}%"></div>
+            </div>
+            <span class="improve-value mono">{{ improvement.current }}/100</span>
+          </div>
+          <div class="improve-row">
+            <span class="improve-label">Potential</span>
+            <div class="improve-track">
+              <div class="improve-fill potential" style="--w:{{ improvement.potential }}%"></div>
+            </div>
+            <span class="improve-value mono">{{ improvement.potential }}/100</span>
+          </div>
+        </div>
+        <div class="improve-stats">
+          <div class="improve-stat">
+            <span class="improve-stat-num">+{{ improvement.gain }}</span>
+            <span class="improve-stat-label">Points Available</span>
+          </div>
+          <div class="improve-stat">
+            <span class="improve-stat-num">{{ improvement.headers_present }}/5</span>
+            <span class="improve-stat-label">Headers Configured</span>
+          </div>
+          <div class="improve-stat">
+            <span class="improve-stat-num mono">{{ improvement.risk_from }} &#8594; {{ improvement.risk_to }}</span>
+            <span class="improve-stat-label">Risk Trajectory</span>
+          </div>
+          <div class="improve-stat">
+            <span class="improve-stat-num mono">{{ improvement.maturity_from }} &#8594; {{ improvement.maturity_to }}</span>
+            <span class="improve-stat-label">Security Maturity</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel dossier">
+        <div class="stamp stamp-{{ 'clear' if risk == 'LOW' else 'blocked' }}">
+          {{ final_report.verdict }}
+        </div>
+        <h2 class="panel-title">Final Security Recommendation Report</h2>
+        <div class="dossier-meta">
+          <div><span class="dossier-key">Risk Status</span><span class="dossier-val mono risk-{{ risk|lower }}-text">{{ final_report.status }} RISK</span></div>
+          <div><span class="dossier-key">Score</span><span class="dossier-val mono">{{ final_report.score }}/100</span></div>
+          <div><span class="dossier-key">Maturity</span><span class="dossier-val mono">{{ final_report.maturity }}</span></div>
+          <div><span class="dossier-key">Potential</span><span class="dossier-val mono">{{ final_report.potential }}/100</span></div>
+        </div>
+
+        <p class="dossier-heading">Audit Conclusion</p>
+        {% for para in final_report.conclusion %}
+          <p class="summary-text">{{ para }}</p>
+        {% endfor %}
+
+        <p class="dossier-heading">Recommended Action Plan</p>
+        <ol class="action-plan">
+          {% for step in final_report.action_plan %}
+            <li>{{ step }}</li>
+          {% endfor %}
+        </ol>
+
+        <p class="dossier-heading">Reassessment</p>
+        <p class="summary-text mono">{{ final_report.reassessment }}</p>
+      </section>
+
+      <section class="download-section">
+        <a href="/download_report" class="download-btn">
+          <span class="download-main">&#128196; Download Complete Security Report</span>
+          <span class="download-sub">PDF &middot; All sections &middot; Professional layout</span>
+        </a>
+      </section>
+    {% endif %}
+
+    <section class="spec-footer">
+      <div class="spec-row"><span>Project</span><span class="mono">API Security Posture Assessment</span></div>
+      <div class="spec-row"><span>Type</span><span class="mono">Automated Header Analysis</span></div>
+      <div class="spec-row"><span>Stack</span><span class="mono">Python &middot; Flask &middot; HTML &middot; CSS</span></div>
+      <div class="spec-row"><span>Features</span><span class="mono">API Scanner &middot; Security Score &middot; Explainable AI &middot; Recommendation Engine &middot; HTML Dashboard</span></div>
+      <div class="spec-row"><span>Version</span><span class="mono">1.0</span></div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <p class="footer-brand">&#128737; API SECURITY POSTURE ASSESSMENT THROUGH AUTOMATED HEADER ANALYSIS</p>
+      <p class="footer-tagline">Automated Header Analysis Engine</p>
+      <p class="footer-stack">Developed using Python &bull; Flask &bull; HTML &bull; CSS</p>
+      <p class="footer-features">Features: API Scanner | Security Score | Explainable AI | Recommendation Engine | HTML Dashboard</p>
+      <p class="footer-copy">&copy; 2026 API Security Posture Assessment</p>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('scan-form').addEventListener('submit', function(){
+      var btn = document.getElementById('scan-btn');
+      btn.disabled = true;
+      btn.querySelector('.btn-label').textContent = 'Scanning...';
+    });
+
+    {% if score is not none %}
+    (function(){
+      var target = {{ score }};
+      var el = document.getElementById('gaugeNum');
+      if (!el) return;
+      var current = 0;
+      var step = Math.ceil(target / 60);
+      var timer = setInterval(function(){
+        current = Math.min(current + step, target);
+        el.textContent = current;
+        if (current >= target) clearInterval(timer);
+      }, 18);
+    })();
+
+    (function(){
+      var score = {{ score }};
+      var risk = '{{ risk }}';
+      var colorMap = { HIGH: '#F5455C', MEDIUM: '#F5A623', LOW: '#2DD4A7' };
+      var fillColor = colorMap[risk] || '#22D3EE';
+
+      new Chart(document.getElementById('gaugeChart'), {
+        type: 'doughnut',
+        data: {
+          datasets: [{
+            data: [score, 100 - score],
+            backgroundColor: [fillColor, '#E6EAF2'],
+            borderWidth: 0,
+            circumference: 270,
+            rotation: 225
+          }]
+        },
+        options: {
+          responsive: false,
+          cutout: '78%',
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          animation: { duration: 1100, easing: 'easeInOutCubic' }
+        }
+      });
+    })();
+
+    (function(){
+      var labels = ['X-Frame-Opts', 'CSP', 'HSTS', 'X-Content', 'Referrer'];
+      var values = [
+        {{ 1 if x_frame   == 'Present' else 0 }},
+        {{ 1 if csp       == 'Present' else 0 }},
+        {{ 1 if hsts      == 'Present' else 0 }},
+        {{ 1 if x_content == 'Present' else 0 }},
+        {{ 1 if referrer  == 'Present' else 0 }}
+      ];
+
+      new Chart(document.getElementById('radarChart'), {
+        type: 'radar',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: 'rgba(34,211,238,0.15)',
+            borderColor: '#0EA5B7',
+            borderWidth: 2,
+            pointBackgroundColor: values.map(function(v){ return v ? '#2DD4A7' : '#F5455C'; }),
+            pointBorderColor: 'transparent',
+            pointRadius: 5
+          }]
+        },
+        options: {
+          responsive: false,
+          scales: {
+            r: {
+              min: 0, max: 1,
+              ticks: { display: false },
+              grid: { color: '#DDE3EE' },
+              angleLines: { color: '#E6EAF2' },
+              pointLabels: { color: '#5C6784', font: { family: "'IBM Plex Mono'", size: 10 } }
+            }
+          },
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          animation: { duration: 900 }
+        }
+      });
+    })();
+
+    /* ── Header Analysis bar chart ────────────────────────────────── */
+    (function(){
+      var labels = ['X-Frame-Options','Content-Security-Policy','Strict-Transport-Security','X-Content-Type-Options','Referrer-Policy','HTTPS'];
+      var values = [
+        {{ 1 if x_frame      == 'Present' else 0 }},
+        {{ 1 if csp          == 'Present' else 0 }},
+        {{ 1 if hsts         == 'Present' else 0 }},
+        {{ 1 if x_content    == 'Present' else 0 }},
+        {{ 1 if referrer     == 'Present' else 0 }},
+        {{ 1 if https_status == 'Present' else 0 }}
+      ];
+
+      var bgColors     = values.map(function(v){ return v ? 'rgba(45,212,167,0.35)' : 'rgba(245,69,92,0.18)'; });
+      var borderColors = values.map(function(v){ return v ? '#2DD4A7' : '#F5455C'; });
+
+      var canvas = document.getElementById('headerBar');
+      if (!canvas) return;
+
+      new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: bgColors,
+            borderColor: borderColors,
+            borderWidth: 1,
+            borderRadius: 4,
+            barThickness: 26
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              min: 0, max: 1,
+              ticks: {
+                stepSize: 1,
+                callback: function(v){ return v === 1 ? 'Present' : 'Missing'; },
+                color: '#5C6784',
+                font: { family: "'IBM Plex Mono'", size: 11 }
+              },
+              grid: { color: '#E6EAF2' }
+            },
+            y: {
+              ticks: { color: '#5C6784', font: { family: "'IBM Plex Mono'", size: 11 } },
+              grid: { display: false }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: function(ctx){ return ctx.raw === 1 ? 'Present' : 'Missing'; } } }
+          },
+          animation: { duration: 900, easing: 'easeInOutQuart' }
+        }
+      });
+    })();
+    {% endif %}
+  </script>
+</body>
+</html>

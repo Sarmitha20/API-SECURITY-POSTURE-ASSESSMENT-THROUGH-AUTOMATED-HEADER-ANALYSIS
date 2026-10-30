@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Security Scanner - Results</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f7fafc; min-height: 100vh; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .header { text-align: center; padding: 30px 0 20px; }
+        .header h1 { color: #2d3748; font-size: 28px; }
+        .header .subtitle { color: #718096; margin-top: 5px; }
+        .header a { color: #667eea; text-decoration: none; font-weight: 500; }
+        .header a:hover { text-decoration: underline; }
+        .card { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); border: 1px solid #edf2f7; }
+        .card h2 { color: #2d3748; margin-bottom: 15px; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+        .empty-state { text-align: center; padding: 60px 20px; }
+        .empty-state .icon { font-size: 64px; margin-bottom: 20px; }
+        .empty-state h2 { color: #2d3748; margin-bottom: 10px; }
+        .empty-state p { color: #718096; margin-bottom: 20px; }
+        .btn { display: inline-block; padding: 12px 30px; border-radius: 10px; font-weight: 600; text-decoration: none; cursor: pointer; border: none; font-size: 15px; transition: all 0.3s; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(102,126,234,0.3); }
+        .btn-secondary { background: #2d3748; color: white; }
+        .btn-secondary:hover { background: #1a202c; }
+        .score-circle { width: 150px; height: 150px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px; font-size: 48px; font-weight: 700; color: white; }
+        .score-circle.low { background: #48bb78; }
+        .score-circle.medium { background: #f6ad55; }
+        .score-circle.high { background: #fc8181; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .info-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+        .info-item:last-child { border-bottom: none; }
+        .info-item .label { color: #718096; font-size: 14px; }
+        .info-item .value { font-weight: 500; color: #2d3748; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .badge-success { background: #c6f6d5; color: #22543d; }
+        .badge-danger { background: #fed7d7; color: #9b2c2c; }
+        .badge-warning { background: #feebc8; color: #7c3a12; }
+        .badge-info { background: #bee3f8; color: #2b6cb0; }
+        .header-item { display: flex; justify-content: space-between; padding: 10px 14px; background: #f7fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .header-item .name { font-weight: 500; color: #2d3748; font-size: 13px; }
+        .header-item .status.present { color: #48bb78; font-weight: 600; }
+        .header-item .status.missing { color: #fc8181; font-weight: 600; }
+        .xai-box { background: #edf2f7; padding: 20px; border-radius: 12px; line-height: 1.8; font-size: 14px; }
+        .xai-box p { margin-bottom: 8px; }
+        .xai-box p:last-child { margin-bottom: 0; }
+        .owasp-item { padding: 12px 16px; background: #f7fafc; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #e53e3e; }
+        .owasp-item .category { font-weight: 600; color: #2d3748; }
+        .owasp-item .desc { color: #4a5568; font-size: 14px; margin-top: 3px; }
+        .recommendation { padding: 12px 16px; margin-bottom: 8px; background: #f7fafc; border-radius: 8px; border-left: 4px solid #667eea; }
+        .recommendation.high { border-left-color: #fc8181; }
+        .recommendation.medium { border-left-color: #f6ad55; }
+        .recommendation.low { border-left-color: #68d391; }
+        .recommendation .rec-priority { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 12px; }
+        .recommendation .rec-priority.high { background: #fed7d7; color: #9b2c2c; }
+        .recommendation .rec-priority.medium { background: #feebc8; color: #7c3a12; }
+        .recommendation .rec-priority.low { background: #c6f6d5; color: #22543d; }
+        .recommendation .rec-text { margin-top: 5px; font-size: 14px; color: #2d3748; }
+        .text-center { text-align: center; }
+        .text-muted { color: #718096; font-size: 14px; }
+        @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } .container { padding: 0 10px; } .card { padding: 18px; } .score-circle { width: 120px; height: 120px; font-size: 36px; } }
+        @media (max-width: 400px) { .header h1 { font-size: 22px; } .card h2 { font-size: 17px; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header"><h1>🛡️ API Security Assessment Results</h1><p class="subtitle"><a href="/">← Back to Scanner</a></p></div>
+        <div id="results">
+            <div class="empty-state"><div class="icon">🔍</div><h2>No Scan Results Found</h2><p>Run a new scan from the main page to see results here.</p><a href="/" class="btn btn-primary">🚀 Go to Scanner</a></div>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const resultsData = sessionStorage.getItem('apiScanResults');
+            if (resultsData) {
+                try { const data = JSON.parse(resultsData); displayResults(data); }
+                catch(e) { console.error('Failed to parse results:', e); showEmptyState('Error loading results. Please try a new scan.'); }
+            } else { showEmptyState('No scan results found. Run a new scan.'); }
+        });
+        function displayResults(data) {
+            const container = document.getElementById('results');
+            const score = data.score;
+            const riskClass = score.risk_level.toLowerCase().replace(' ', '');
+            let headersHtml = '';
+            const headerDetails = data.security_analysis.header_details;
+            for (const [key, header] of Object.entries(headerDetails)) {
+                headersHtml += '<div class="header-item"><span class="name">' + header.name + '</span><span class="status ' + (header.present ? 'present' : 'missing') + '">' + (header.present ? '✅ Present' : '❌ Missing') + '</span></div>';
+            }
+            let owaspHtml = '';
+            const owaspMappings = data.owasp_mapping.mappings.filter(m => m.category !== 'Assessment');
+            if (owaspMappings.length > 0) {
+                owaspMappings.forEach(m => {
+                    owaspHtml += '<div class="owasp-item"><div class="category">' + m.category + ' - ' + m.name + '</div><div class="desc">' + m.description + '</div><span class="badge ' + (m.severity.toLowerCase().includes('high') ? 'badge-danger' : m.severity.toLowerCase().includes('medium') ? 'badge-warning' : 'badge-success') + '" style="margin-top:5px;display:inline-block;">' + m.severity + '</span></div>';
+                });
+            } else { owaspHtml = '<p class="text-muted">No OWASP findings detected.</p>'; }
+            let recHtml = '';
+            const recItems = data.recommendations.items || [];
+            if (recItems.length > 0) {
+                recItems.forEach(r => {
+                    const priorityClass = r.priority.toLowerCase();
+                    recHtml += '<div class="recommendation ' + priorityClass + '"><span class="rec-priority ' + priorityClass + '">' + r.priority + '</span><span style="font-size:13px;color:#718096;margin-left:8px;">' + r.category + '</span><div class="rec-text">' + r.recommendation + '</div><div style="font-size:13px;color:#718096;margin-top:4px;">🔧 ' + r.implementation + '</div></div>';
+                });
+            } else { recHtml = '<p class="text-muted">✅ No recommendations needed.</p>'; }
+            const html = '<div class="card"><h2>📊 Security Score</h2><div class="text-center"><div class="score-circle ' + riskClass + '">' + score.score + '</div><div style="font-size:14px;color:#718096;">Out of 100</div><div style="margin-top:8px;"><span class="badge ' + (riskClass === 'low' ? 'badge-success' : riskClass === 'medium' ? 'badge-warning' : 'badge-danger') + '" style="font-size:16px;padding:6px 20px;">' + score.risk_level + '</span></div><p style="margin-top:10px;color:#4a5568;font-size:14px;">' + score.audit_conclusion + '</p></div></div><div class="card"><h2>🔗 API Information</h2><div class="grid-2"><div class="info-item"><span class="label">URL</span><span class="value" style="font-size:13px;word-break:break-all;">' + data.api_url + '</span></div><div class="info-item"><span class="label">Status Code</span><span class="value">' + (data.api_info.status_code || 'N/A') + '</span></div><div class="info-item"><span class="label">Response Time</span><span class="value">' + (data.api_info.response_time || 0) + 'ms</span></div><div class="info-item"><span class="label">HTTPS</span><span class="value" style="color:' + (data.api_info.https_enabled ? '#48bb78' : '#fc8181') + '">' + (data.api_info.https_enabled ? '✅ Enabled' : '❌ Disabled') + '</span></div></div></div><div class="card"><h2>🔒 Security Headers Analysis <span class="badge badge-info">' + score.present_count + '/' + score.total_headers + '</span></h2><p class="text-muted" style="margin-bottom:10px;">Coverage: ' + score.header_coverage + '%</p><div class="grid-2">' + headersHtml + '</div></div><div class="card"><h2>🤖 Explainable AI Summary</h2><div class="xai-box"><p>' + data.xai_summary.summary + '</p></div></div><div class="card"><h2>📋 OWASP API Security Mapping</h2>' + owaspHtml + '</div><div class="card"><h2>💡 Security Recommendations</h2><div style="background:#ebf8ff;padding:12px 16px;border-radius:8px;margin-bottom:12px;border:1px solid #bee3f8;"><span style="color:#2b6cb0;font-weight:500;">📈 Potential Improvement: +' + (data.recommendations.total_improvement || 0) + ' points</span><span style="color:#2b6cb0;margin-left:10px;font-size:14px;">' + (data.recommendations.current_score || score.score) + ' → ' + (data.potential_score || score.score + (data.recommendations.total_improvement || 0)) + '</span></div>' + recHtml + '</div><div style="display:flex;gap:10px;flex-wrap:wrap;"><a href="/" class="btn btn-primary" style="flex:1;text-align:center;">🔄 New Scan</a><button class="btn btn-secondary" onclick="window.print()" style="flex:1;">🖨️ Print Results</button></div>';
+            container.innerHTML = html;
+        }
+        function showEmptyState(message) {
+            const container = document.getElementById('results');
+            container.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><h2>' + (message || 'No Scan Results Found') + '</h2><p>Run a new scan from the main page.</p><a href="/" class="btn btn-primary">🚀 Go to Scanner</a></div>';
+        }
+    </script>
+</body>
+</html>
